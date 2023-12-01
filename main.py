@@ -33,9 +33,6 @@ client_secret = config.client_secret
 num_threads = config.num_threads
 num_pages = config.num_pages
 
-hh_login = config.hh_login
-hh_password = config.hh_password
-
 not_stated_message = config.not_stated_message
 
 headers = {
@@ -148,9 +145,9 @@ def process_page(driver, action, page_range, captcha_lock):
         password_field = eternal_wait(driver, s, EC.element_to_be_clickable, (By.XPATH, '//input[@type="password"]'))
         time.sleep(10)
 
-        login_field.send_keys(hh_login)
+        login_field.send_keys("your_hh_login")
         time.sleep(10)
-        password_field.send_keys(hh_password)
+        password_field.send_keys("your_hh_password")
         time.sleep(10)
 
         login_button = eternal_wait(driver, s, EC.element_to_be_clickable,
