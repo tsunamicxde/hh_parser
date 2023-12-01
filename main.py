@@ -335,6 +335,6 @@ def chunked(iterable, n):
     return iter(lambda: tuple(islice(it, n)), ())
 
 
-page_ranges = list(chunked(range(0, num_pages), (num_pages/num_threads)))
+page_ranges = list(chunked(range(0, num_pages), int(num_pages/num_threads)))
 
 run_scraping(page_ranges, captcha_lock)
