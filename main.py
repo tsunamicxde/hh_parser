@@ -8,10 +8,9 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
 
-from multiprocessing import Lock
 import threading
 from itertools import islice
 
@@ -22,10 +21,6 @@ import easyocr
 from PIL import Image
 
 import config
-
-browser_count = 0
-
-captcha_lock = Lock()
 
 client_id = config.client_id
 client_secret = config.client_secret
@@ -59,7 +54,6 @@ def get_data(date_from, date_to):
     date_pub_to = current_datetime - timedelta(hours=date_from)
     date_pub_from = current_datetime - timedelta(hours=date_to)
 
-    # Параметры запроса
     params = {
         'area': '113',
         'industry': '50',
@@ -83,13 +77,8 @@ def process_captcha(image_path):
     return formatted_text
 
 
-def process_page(driver, action, page_range, captcha_lock):
-    global browser_count
-
-    browser_count += 1
-
+def process_page(driver, page_range):
     driver = webdriver.Chrome()
-    browser_id = browser_count
 
     def solve_captcha(text):
         captcha_input = driver.find_element(By.XPATH, '//input[@name="captchaText"]')
@@ -98,63 +87,73 @@ def process_page(driver, action, page_range, captcha_lock):
 
         time.sleep(10)
 
-        submit_button = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located(
-                (By.XPATH, '//button[@data-qa="account-captcha-submit"]'))
-        )
-        time.sleep(5)
-        submit_button.click()
-        time.sleep(5)
+        captcha_input.send_keys(Keys.ENTER)
 
-    def eternal_wait(driver, timeout, condition_type,
-                     locator_tuple):
-        while True:
-            try:
-                element = WebDriverWait(driver, timeout).until(
-                    condition_type(locator_tuple)
-                )
-                return element
-            except:
-                print(f"\n\nWaiting for the element(s) {locator_tuple} to become {condition_type}…")
-                time.sleep(0.5)
-                continue
-
-    def click_and_wait(element, delay=1):
-        action.move_to_element(element).click().perform()
-        time.sleep(delay)
-
-    s = 10
     driver.get(LOGIN_PAGE)
-    action = ActionChains(driver)
-    is_captcha_showed = False
 
     def login():
-        driver.get(LOGIN_PAGE)
+        show_more_button = WebDriverWait(driver, 2).until(
+            EC.presence_of_element_located(
+                (By.XPATH, '//button[@data-qa="expand-login-by-password"]'))
+        )
+        time.sleep(2)
+        show_more_button.click()
 
-        time.sleep(10)
+        time.sleep(2)
 
-        show_more_button = eternal_wait(driver, s, EC.element_to_be_clickable,
-                                        (By.XPATH, '//button[@data-qa="expand-login-by-password"]'))
-        time.sleep(10)
-        action.click(show_more_button).perform()
-        time.sleep(10)
+        login_input = driver.find_element(By.XPATH, "//input[@data-qa='login-input-username']")
+        login_input.send_keys("your_hh_login")
 
-        login_field = eternal_wait(driver, s, EC.element_to_be_clickable,
-                                   (By.XPATH, '//input[@data-qa="login-input-username"]'))
-        time.sleep(10)
-        password_field = eternal_wait(driver, s, EC.element_to_be_clickable, (By.XPATH, '//input[@type="password"]'))
-        time.sleep(10)
+        password_input = driver.find_element(By.XPATH, "//input[@type='password']")
+        password_input.send_keys("your_hh_password")
 
-        login_field.send_keys("your_hh_login")
-        time.sleep(10)
-        password_field.send_keys("your_hh_password")
-        time.sleep(10)
+        password_input.send_keys(Keys.ENTER)
 
-        login_button = eternal_wait(driver, s, EC.element_to_be_clickable,
-                                    (By.XPATH, "//button[@data-qa='account-login-submit']"))
-        click_and_wait(login_button, 5)
+        time.sleep(2)
 
-    login()
+        current_url = driver.current_url
+
+        is_captcha_showed = "account_login" not in str(current_url)
+
+        return is_captcha_showed
+
+    def solve_login_captcha():
+        try:
+            full_captcha_path = f'full_captcha{str(page_range)[:2]}.png'
+            driver.save_screenshot(full_captcha_path)
+
+            im = Image.open(full_captcha_path).convert('L')
+            width, height = im.size
+
+            new_width, new_height = 300, 80
+
+            left = (width - new_width) // 2 - 170
+            top = (height - new_height) // 2 + 100
+            right = (width + new_width) // 2 - 50
+            bottom = (height + new_height) // 2 + 150
+
+            im_cropped = im.crop((left, top, right, bottom))
+            captcha_path = f'captcha{str(page_range)[:2]}.png'
+            im_cropped.save(captcha_path)
+
+            formatted_text = process_captcha(captcha_path)
+
+            solve_captcha(formatted_text)
+
+            time.sleep(5)
+
+            current_url = driver.current_url
+            is_captcha_showed = "account_login" in current_url
+            return is_captcha_showed
+        except Exception:
+            return False
+
+    is_login_successful = login()
+    if not is_login_successful:
+        while not is_login_successful:
+            is_login_successful = solve_login_captcha()
+
+    is_captcha_showed = False
 
     for page_number in page_range:
         links = []
@@ -202,7 +201,7 @@ def process_page(driver, action, page_range, captcha_lock):
                     is_captcha_showed = True
 
                 while is_captcha_showed is True:
-                    full_captcha_path = f'full_captcha_{browser_id}.png'
+                    full_captcha_path = f'full_captcha_{str(page_range)[:2]}.png'
                     driver.save_screenshot(full_captcha_path)
 
                     im = Image.open(full_captcha_path).convert('L')
@@ -217,11 +216,10 @@ def process_page(driver, action, page_range, captcha_lock):
                     bottom = (height + new_height) // 2
 
                     im_cropped = im.crop((left, top, right, bottom))
-                    captcha_path = f'captcha_{browser_id}.png'
+                    captcha_path = f'captcha_{str(page_range)[:2]}.png'
                     im_cropped.save(captcha_path)
 
-                    with captcha_lock:
-                        formatted_text = process_captcha(captcha_path)
+                    formatted_text = process_captcha(captcha_path)
 
                     solve_captcha(formatted_text)
 
@@ -310,7 +308,7 @@ def process_page(driver, action, page_range, captcha_lock):
     driver.quit()
 
 
-def run_scraping(page_ranges, captcha_lock):
+def run_scraping(page_ranges):
     threads = []
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument('--headless')
@@ -318,8 +316,7 @@ def run_scraping(page_ranges, captcha_lock):
     drivers = [webdriver.Chrome(options=chrome_options) for _ in range(len(page_ranges))]
 
     for i, page_range in enumerate(page_ranges):
-        action = ActionChains(drivers[i])  # Создание объекта ActionChains для каждого драйвера
-        thread = threading.Thread(target=process_page, args=(drivers[i], action, page_range, captcha_lock))
+        thread = threading.Thread(target=process_page, args=(drivers[i], page_range))
         threads.append(thread)
         thread.start()
 
@@ -337,4 +334,4 @@ def chunked(iterable, n):
 
 page_ranges = list(chunked(range(0, num_pages), int(num_pages/num_threads)))
 
-run_scraping(page_ranges, captcha_lock)
+run_scraping(page_ranges)
