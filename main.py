@@ -102,10 +102,10 @@ def process_page(driver, page_range):
         time.sleep(2)
 
         login_input = driver.find_element(By.XPATH, "//input[@data-qa='login-input-username']")
-        login_input.send_keys("your_hh_login")
+        login_input.send_keys(config.login)
 
         password_input = driver.find_element(By.XPATH, "//input[@type='password']")
-        password_input.send_keys("your_hh_password")
+        password_input.send_keys(config.password)
 
         password_input.send_keys(Keys.ENTER)
 
@@ -113,7 +113,7 @@ def process_page(driver, page_range):
 
         current_url = driver.current_url
 
-        is_captcha_showed = "account_login" not in str(current_url)
+        is_captcha_showed = "account_login" in str(current_url)
 
         return is_captcha_showed
 
