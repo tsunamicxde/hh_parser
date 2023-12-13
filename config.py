@@ -6,5 +6,5 @@ password = "your_hh_password"
 
 not_stated_message = "Не указано"
 
-num_threads = 20
+num_threads = 10
 num_pages = 100

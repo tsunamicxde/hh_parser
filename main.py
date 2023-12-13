@@ -85,9 +85,14 @@ def process_page(driver, page_range):
         captcha_input.clear()
         captcha_input.send_keys(text)
 
-        time.sleep(10)
+        time.sleep(2)
 
-        captcha_input.send_keys(Keys.ENTER)
+        button = WebDriverWait(driver, 2).until(
+            EC.presence_of_element_located(
+                (By.XPATH, '//button[@data-qa="account-captcha-submit"]'))
+        )
+        time.sleep(5)
+        button.click()
 
     driver.get(LOGIN_PAGE)
 
